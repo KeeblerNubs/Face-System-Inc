@@ -1,0 +1,18 @@
+services:
+  api:
+    build: .
+    container_name: face_system_api
+    ports:
+      - "8000:8000"
+    restart: unless-stopped
+
+  telegram-bot:
+    build: .
+    container_name: face_system_telegram_bot
+    command: ["python", "bot.py"]
+    environment:
+      API_BASE_URL: "http://api:8000"
+      TELEGRAM_BOT_TOKEN: "${TELEGRAM_BOT_TOKEN}"
+    depends_on:
+      - api
+    restart: unless-stopped

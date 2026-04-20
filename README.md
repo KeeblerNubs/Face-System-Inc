@@ -7,7 +7,7 @@ A FastAPI service that:
 
 > ⚠️ This project should only be used with explicit consent and authorized datasets.
 
-## Quick start
+## Quick start (local)
 
 ```bash
 python -m venv .venv
@@ -17,6 +17,29 @@ uvicorn main:app --reload
 ```
 
 Server URL: `http://127.0.0.1:8000`
+
+## Run with Docker + Telegram bot
+
+1. Create a bot with [@BotFather](https://t.me/BotFather) and copy your token.
+2. Set the token as an environment variable.
+3. Start both API and bot in Docker.
+
+```bash
+export TELEGRAM_BOT_TOKEN="<your_bot_token>"
+docker compose up --build
+```
+
+### Services
+
+- API: `http://127.0.0.1:8000`
+- Telegram bot service: runs `bot.py` and talks to the API over Docker network (`http://api:8000`)
+
+### Telegram commands
+
+- `/start` — help and command list.
+- `/health` — checks API health endpoint.
+- `/platforms` — returns supported social platforms.
+- `/social <username>` — searches username across platforms.
 
 ## API endpoints
 
