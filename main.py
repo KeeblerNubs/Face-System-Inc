@@ -8,6 +8,7 @@ from social_media import (
     search_username,
     search_username_on_platforms,
     list_supported_platforms,
+    validate_username,
 )
 
 app = FastAPI(title="Face Recognition & Social Media Search System")
@@ -27,6 +28,10 @@ async def add_person(
 
     social_profiles = []
     if username:
+        try:
+            validate_username(username)
+        except ValueError as e:
+            return {"error": str(e)}
         social_profiles = await search_username(username)
 
     add_face(embedding, person_id, username=username, social_profiles=social_profiles)
@@ -57,17 +62,24 @@ async def search_social(
         description="Comma-separated platform names to search (default: all)",
     ),
 ):
+    try:
+        validate_username(username)
+    except ValueError as e:
+        return {"error": str(e)}
+
     log_event("social_search", username)
 
+    supported = set(list_supported_platforms())
     if platforms:
         platform_list = [p.strip() for p in platforms.split(",")]
-        results = await search_username_on_platforms(username, platform_list)
+        valid_platforms = [p for p in platform_list if p in supported]
+        results = await search_username_on_platforms(username, valid_platforms)
     else:
         results = await search_username(username)
 
     return {
         "username": username,
-        "platforms_checked": len(list_supported_platforms()) if not platforms else len(platform_list),
+        "platforms_checked": len(supported) if not platforms else len(valid_platforms),
         "profiles_found": len(results),
         "results": results,
     }
