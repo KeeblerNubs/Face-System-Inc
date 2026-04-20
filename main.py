@@ -1,17 +1,25 @@
-from fastapi import FastAPI, UploadFile, File, Query
+from __future__ import annotations
+
 from typing import Optional
-import numpy as np
-from face import get_embedding
-from faiss_index import search_face, add_face
+
+from fastapi import FastAPI, File, HTTPException, Query, UploadFile
+
 from db import log_event
+from face import get_embedding
+from faiss_index import add_face, search_face
 from social_media import (
+    list_supported_platforms,
     search_username,
     search_username_on_platforms,
-    list_supported_platforms,
     validate_username,
 )
 
 app = FastAPI(title="Face Recognition & Social Media Search System")
+
+
+@app.get("/health")
+async def health_check() -> dict[str, str]:
+    return {"status": "ok"}
 
 
 @app.post("/add")
@@ -24,19 +32,22 @@ async def add_person(
     embedding = get_embedding(image_bytes)
 
     if embedding is None:
-        return {"error": "No face detected"}
+        raise HTTPException(status_code=400, detail="No face detected in image.")
 
     social_profiles = []
     if username:
         try:
             validate_username(username)
-        except ValueError as e:
-            return {"error": str(e)}
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
         social_profiles = await search_username(username)
 
-    add_face(embedding, person_id, username=username, social_profiles=social_profiles)
-    log_event("add", person_id)
+    try:
+        add_face(embedding, person_id, username=username, social_profiles=social_profiles)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
+    log_event("add", person_id)
     return {"status": "added", "social_profiles": social_profiles}
 
 
@@ -46,11 +57,10 @@ async def search(file: UploadFile = File(...)):
     embedding = get_embedding(image_bytes)
 
     if embedding is None:
-        return {"error": "No face detected"}
+        raise HTTPException(status_code=400, detail="No face detected in image.")
 
     results = search_face(embedding)
     log_event("search", "query")
-
     return {"results": results}
 
 
@@ -64,22 +74,33 @@ async def search_social(
 ):
     try:
         validate_username(username)
-    except ValueError as e:
-        return {"error": str(e)}
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     log_event("social_search", username)
 
     supported = set(list_supported_platforms())
     if platforms:
-        platform_list = [p.strip() for p in platforms.split(",")]
-        valid_platforms = [p for p in platform_list if p in supported]
-        results = await search_username_on_platforms(username, valid_platforms)
+        platform_list = [p.strip() for p in platforms.split(",") if p.strip()]
+        invalid_platforms = [p for p in platform_list if p not in supported]
+        if invalid_platforms:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    "Unsupported platforms requested: "
+                    + ", ".join(sorted(invalid_platforms))
+                ),
+            )
+
+        results = await search_username_on_platforms(username, platform_list)
+        checked_count = len(platform_list)
     else:
         results = await search_username(username)
+        checked_count = len(supported)
 
     return {
         "username": username,
-        "platforms_checked": len(supported) if not platforms else len(valid_platforms),
+        "platforms_checked": checked_count,
         "profiles_found": len(results),
         "results": results,
     }

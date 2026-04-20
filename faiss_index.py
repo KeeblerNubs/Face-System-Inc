@@ -1,45 +1,72 @@
+from __future__ import annotations
+
+from typing import Any, Optional
+
 import faiss
 import numpy as np
-from typing import Optional
 
-dimension = 512
-index = faiss.IndexFlatL2(dimension)
+index: Optional[faiss.IndexFlatL2] = None
+embedding_dimension: Optional[int] = None
+metadata: list[dict[str, Any]] = []
 
-metadata = []
+
+def _ensure_index(dimension: int) -> None:
+    global index, embedding_dimension
+    if index is None:
+        index = faiss.IndexFlatL2(dimension)
+        embedding_dimension = dimension
 
 
 def add_face(
-    embedding,
+    embedding: np.ndarray,
     person_id: str,
     username: Optional[str] = None,
     social_profiles: Optional[list] = None,
-):
-    global index, metadata
+) -> None:
+    global index, metadata, embedding_dimension
 
-    vec = np.array([embedding]).astype("float32")
-    index.add(vec)
+    vector = np.asarray(embedding, dtype="float32").reshape(1, -1)
+    dimension = vector.shape[1]
 
-    metadata.append({
-        "person_id": person_id,
-        "username": username,
-        "social_profiles": social_profiles or [],
-    })
+    _ensure_index(dimension)
+    if embedding_dimension != dimension:
+        raise ValueError(
+            f"Embedding dimension mismatch: expected {embedding_dimension}, got {dimension}."
+        )
+
+    index.add(vector)
+    metadata.append(
+        {
+            "person_id": person_id,
+            "username": username,
+            "social_profiles": social_profiles or [],
+        }
+    )
 
 
-def search_face(embedding, k=5):
-    vec = np.array([embedding]).astype("float32")
-    D, I = index.search(vec, k)
+def search_face(embedding: np.ndarray, k: int = 5) -> list[dict[str, Any]]:
+    if index is None or not metadata:
+        return []
+
+    vector = np.asarray(embedding, dtype="float32").reshape(1, -1)
+    if embedding_dimension is not None and vector.shape[1] != embedding_dimension:
+        return []
+
+    result_count = min(k, len(metadata))
+    distances, indices = index.search(vector, result_count)
 
     results = []
-    for i, idx in enumerate(I[0]):
+    for i, idx in enumerate(indices[0]):
         if idx == -1:
             continue
         entry = metadata[idx]
-        results.append({
-            "person_id": entry["person_id"],
-            "distance": float(D[0][i]),
-            "username": entry.get("username"),
-            "social_profiles": entry.get("social_profiles", []),
-        })
+        results.append(
+            {
+                "person_id": entry["person_id"],
+                "distance": float(distances[0][i]),
+                "username": entry.get("username"),
+                "social_profiles": entry.get("social_profiles", []),
+            }
+        )
 
     return results
