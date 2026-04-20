@@ -1,6 +1,18 @@
 import httpx
 import asyncio
+import re
 from typing import Optional
+
+USERNAME_PATTERN = re.compile(r"^[a-zA-Z0-9._-]+$")
+
+
+def validate_username(username: str) -> str:
+    if not USERNAME_PATTERN.match(username):
+        raise ValueError(
+            "Username contains invalid characters. "
+            "Only alphanumeric, dots, underscores, and hyphens are allowed."
+        )
+    return username
 
 PLATFORMS = {
     # Major social networks
@@ -142,7 +154,7 @@ def _looks_like_valid_profile(platform: str, final_url: str, body: str) -> bool:
         "nothing here",
         "doesn't exist",
         "does not exist",
-        "404",
+        "error 404",
         "sorry, this page",
         "account suspended",
         "this account doesn't exist",
@@ -161,6 +173,7 @@ def _looks_like_valid_profile(platform: str, final_url: str, body: str) -> bool:
 
 
 async def search_username(username: str) -> list[dict]:
+    validate_username(username)
     semaphore = asyncio.Semaphore(MAX_CONCURRENT)
     results: list[dict] = []
 
@@ -186,6 +199,7 @@ async def search_username(username: str) -> list[dict]:
 async def search_username_on_platforms(
     username: str, platforms: list[str]
 ) -> list[dict]:
+    validate_username(username)
     selected = {
         p: PLATFORMS[p] for p in platforms if p in PLATFORMS
     }
