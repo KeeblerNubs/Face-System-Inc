@@ -33,11 +33,13 @@ async def _api_get(path: str, params: dict[str, Any] | None = None) -> dict[str,
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     text = (
-        "🤖 Face-System bot is online.\n\n"
+        "Face-System bot is online.\n\n"
         "Commands:\n"
         "/health - API health check\n"
         "/platforms - list supported social platforms\n"
-        "/social <username> - search username across platforms"
+        "/social <username> - search username across platforms\n"
+        "/name <full name> - search by real name\n"
+        "/scrape <username> - search with profile scraping"
     )
     await update.message.reply_text(text)
 
@@ -104,6 +106,91 @@ async def social(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await update.message.reply_text("\n".join(lines), disable_web_page_preview=True)
 
 
+async def scrape(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Search with profile scraping enabled (pictures, bios, names)."""
+    if not context.args:
+        await update.message.reply_text("Usage: /scrape <username>")
+        return
+
+    username = context.args[0].strip()
+    try:
+        data = await _api_get(
+            "/search/social",
+            params={"username": username, "scrape": "true"},
+        )
+    except httpx.HTTPStatusError as exc:
+        detail = exc.response.text if exc.response is not None else str(exc)
+        await update.message.reply_text(f"Scrape search failed: {detail}")
+        return
+    except httpx.HTTPError as exc:
+        await update.message.reply_text(f"Scrape search failed: {exc}")
+        return
+
+    results = data.get("results", [])
+    if not results:
+        await update.message.reply_text(f"No profiles found for '{username}'.")
+        return
+
+    lines = [f"Scraped profiles for '{username}': {len(results)}"]
+    for item in results[:10]:
+        profile = item.get("profile", {})
+        line = f"- {item['platform']}: {item['url']}"
+        if profile.get("display_name"):
+            line += f"\n  Name: {profile['display_name']}"
+        if profile.get("bio"):
+            bio_preview = profile["bio"][:100]
+            line += f"\n  Bio: {bio_preview}"
+        if profile.get("profile_picture"):
+            line += f"\n  Pic: {profile['profile_picture']}"
+        lines.append(line)
+
+    if len(results) > 10:
+        lines.append(f"...and {len(results) - 10} more")
+
+    await update.message.reply_text("\n".join(lines), disable_web_page_preview=True)
+
+
+async def name_search(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Search by real name across platforms."""
+    if not context.args:
+        await update.message.reply_text("Usage: /name <full name>")
+        return
+
+    name = " ".join(context.args).strip()
+    try:
+        data = await _api_get("/search/name", params={"name": name})
+    except httpx.HTTPStatusError as exc:
+        detail = exc.response.text if exc.response is not None else str(exc)
+        await update.message.reply_text(f"Name search failed: {detail}")
+        return
+    except httpx.HTTPError as exc:
+        await update.message.reply_text(f"Name search failed: {exc}")
+        return
+
+    results = data.get("results", [])
+    usernames_tried = data.get("usernames_tried", [])
+
+    if not results:
+        await update.message.reply_text(
+            f"No profiles found for '{name}'.\n"
+            f"Tried {len(usernames_tried)} username variations."
+        )
+        return
+
+    lines = [
+        f"Profiles found for '{name}': {len(results)}",
+        f"Username variations tried: {len(usernames_tried)}",
+    ]
+    for item in results[:15]:
+        matched = item.get("matched_username", "")
+        lines.append(f"- {item['platform']}: {item['url']} (as {matched})")
+
+    if len(results) > 15:
+        lines.append(f"...and {len(results) - 15} more")
+
+    await update.message.reply_text("\n".join(lines), disable_web_page_preview=True)
+
+
 def main() -> None:
     if not TELEGRAM_BOT_TOKEN:
         raise RuntimeError(
@@ -116,6 +203,8 @@ def main() -> None:
     application.add_handler(CommandHandler("health", health))
     application.add_handler(CommandHandler("platforms", platforms))
     application.add_handler(CommandHandler("social", social))
+    application.add_handler(CommandHandler("scrape", scrape))
+    application.add_handler(CommandHandler("name", name_search))
 
     logger.info("Starting Telegram bot (API base URL: %s)", API_BASE_URL)
     application.run_polling()
