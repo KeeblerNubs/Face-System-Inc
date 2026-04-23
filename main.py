@@ -7,6 +7,7 @@ from fastapi import FastAPI, File, HTTPException, Query, UploadFile
 from db import log_event
 from face import get_embedding
 from faiss_index import add_face, search_face
+from phone import reverse_phone_lookup
 from social_media import (
     list_supported_platforms,
     search_username,
@@ -110,3 +111,26 @@ async def search_social(
 async def get_platforms():
     platforms = list_supported_platforms()
     return {"count": len(platforms), "platforms": platforms}
+
+
+@app.get("/search/phone")
+async def search_phone(
+    number: str = Query(..., description="Phone number in E.164 or national format"),
+    region: Optional[str] = Query(
+        default=None,
+        description="ISO 3166-1 alpha-2 region code (e.g. US, GB) for national-format numbers",
+    ),
+    numverify: bool = Query(
+        default=False,
+        description="If true, also query Numverify (requires NUMVERIFY_API_KEY env var)",
+    ),
+):
+    try:
+        result = await reverse_phone_lookup(
+            number, default_region=region, use_numverify=numverify
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    log_event("phone_lookup", result["formats"]["e164"])
+    return result

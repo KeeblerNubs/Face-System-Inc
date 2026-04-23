@@ -3,7 +3,8 @@
 A FastAPI service that:
 - stores facial embeddings for known people,
 - searches for similar faces,
-- and looks up username presence across many social platforms.
+- looks up username presence across many social platforms,
+- and performs reverse phone number lookup (country, region, carrier, line type, timezones).
 
 > ⚠️ This project should only be used with explicit consent and authorized datasets.
 
@@ -40,6 +41,7 @@ docker compose up --build
 - `/health` — checks API health endpoint.
 - `/platforms` — returns supported social platforms.
 - `/social <username>` — searches username across platforms.
+- `/phone <number> [region]` — reverse phone number lookup.
 
 ## API endpoints
 
@@ -49,6 +51,9 @@ docker compose up --build
 - `GET /search/social?username=X` — checks all supported social platforms.
 - `GET /search/social?username=X&platforms=Instagram,Twitter` — checks specific platforms.
 - `GET /platforms` — lists supported social platforms.
+- `GET /search/phone?number=+14155552671` — reverse phone number lookup (country, region, carrier, line type, timezones).
+- `GET /search/phone?number=4155552671&region=US` — national-format numbers with an ISO region hint.
+- `GET /search/phone?number=+14155552671&numverify=true` — also query Numverify (requires `NUMVERIFY_API_KEY` env var).
 
 ## Behavioral notes
 
@@ -81,6 +86,26 @@ curl -X POST "http://127.0.0.1:8000/search" \
 ```bash
 curl "http://127.0.0.1:8000/search/social?username=test_user&platforms=GitHub,Instagram"
 ```
+
+### Reverse phone number lookup
+
+```bash
+# E.164 format (preferred)
+curl "http://127.0.0.1:8000/search/phone?number=%2B14155552671"
+
+# National format with a region hint
+curl "http://127.0.0.1:8000/search/phone?number=4155552671&region=US"
+
+# Optional Numverify enrichment (requires NUMVERIFY_API_KEY env var)
+curl "http://127.0.0.1:8000/search/phone?number=%2B14155552671&numverify=true"
+```
+
+The response includes validity, country/region code, rough geographic location,
+carrier (when known), line type (mobile/fixed/voip/...), timezones, and formatted
+strings (E.164, international, national, RFC 3966). All enrichment other than
+Numverify is fully offline via Google's libphonenumber. Owner/name lookup
+requires a paid third-party API (e.g. Numverify, Twilio Lookup, Truecaller) —
+this service ships with optional Numverify support only.
 
 ## Supported platforms
 
