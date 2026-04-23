@@ -10,7 +10,7 @@ from phonenumbers import carrier, geocoder, timezone
 from phonenumbers.phonenumberutil import NumberParseException
 
 NUMVERIFY_API_KEY_ENV = "NUMVERIFY_API_KEY"
-NUMVERIFY_URL = "http://apilayer.net/api/validate"
+NUMVERIFY_URL = "https://apilayer.net/api/validate"
 NUMVERIFY_TIMEOUT = 10.0
 
 _DIGITS_AND_PLUS = re.compile(r"[^\d+]")
@@ -145,7 +145,7 @@ async def reverse_phone_lookup(
 
     if use_numverify:
         try:
-            numverify = await numverify_lookup(raw)
+            numverify = await numverify_lookup(result["formats"]["e164"])
         except (httpx.HTTPError, ValueError) as exc:
             numverify = {"error": str(exc)}
         if numverify is not None:
