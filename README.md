@@ -3,10 +3,11 @@
 A FastAPI service that:
 - stores facial embeddings for known people,
 - searches for similar faces,
-- looks up username presence across many social platforms,
-- and performs reverse phone number lookup (country, region, carrier, line type, timezones).
+- looks up username presence across 100+ social platforms,
+- scrapes profile pictures, display names, and bios from found profiles,
+- generates username variations from a real name and searches them all.
 
-> ⚠️ This project should only be used with explicit consent and authorized datasets.
+> This project should only be used with explicit consent and authorized datasets.
 
 ## Quick start (local)
 
@@ -41,7 +42,8 @@ docker compose up --build
 - `/health` — checks API health endpoint.
 - `/platforms` — returns supported social platforms.
 - `/social <username>` — searches username across platforms.
-- `/phone <number> [region]` — reverse phone number lookup.
+- `/name <full name>` — searches by real name using generated username variations.
+- `/scrape <username>` — searches username with profile scraping (pictures, bios, names).
 
 ## API endpoints
 
@@ -50,10 +52,34 @@ docker compose up --build
 - `POST /search` (`file`) — searches for top face matches.
 - `GET /search/social?username=X` — checks all supported social platforms.
 - `GET /search/social?username=X&platforms=Instagram,Twitter` — checks specific platforms.
+- `GET /search/social?username=X&scrape=true` — checks platforms **and** scrapes profile data (picture, display name, bio, stats).
+- `GET /search/name?name=John+Doe` — generates username variations from a real name and searches all platforms.
+- `GET /search/name?name=John+Doe&scrape=true` — name search with profile scraping.
+- `GET /search/name/usernames?name=John+Doe` — preview the username variations that would be generated for a name.
+- `POST /search/identify` (`file`, optional `name`, optional `username`, `scrape`) — combines face matching with social media discovery in one request.
 - `GET /platforms` — lists supported social platforms.
 - `GET /search/phone?number=+14155552671` — reverse phone number lookup (country, region, carrier, line type, timezones).
 - `GET /search/phone?number=4155552671&region=US` — national-format numbers with an ISO region hint.
 - `GET /search/phone?number=+14155552671&numverify=true` — also query Numverify (requires `NUMVERIFY_API_KEY` env var).
+
+## Profile scraping
+
+When `scrape=true` is passed to any search endpoint, each found profile is enriched with:
+
+| Field             | Description                                         |
+|-------------------|-----------------------------------------------------|
+| `profile_picture` | URL to the profile avatar (from OG/meta/img tags)   |
+| `display_name`    | Display name extracted from page title or meta tags  |
+| `bio`             | Bio or description text (up to 1000 characters)     |
+| `stats`           | Follower / following / post counts when available    |
+
+## Name-based search
+
+The `/search/name` endpoint generates plausible username variations from a real name and checks each one. For example, "John Doe" generates variations like:
+
+`johndoe`, `john.doe`, `john_doe`, `doejohn`, `johnd`, `jdoe`, `john.doe23`, etc.
+
+Use `/search/name/usernames?name=John+Doe` to preview the exact variations before running a full search.
 
 ## Behavioral notes
 
@@ -64,6 +90,8 @@ docker compose up --build
   - embedding dimension mismatch.
 - Face analysis attempts GPU first, then falls back to CPU automatically.
 - FAISS index dimension is initialized from the first embedding and validated on future inserts/searches.
+- Profile scraping uses BeautifulSoup + lxml for fast HTML parsing.
+- Concurrency is throttled to 20 simultaneous outbound requests.
 
 ## Example requests
 
@@ -87,31 +115,31 @@ curl -X POST "http://127.0.0.1:8000/search" \
 curl "http://127.0.0.1:8000/search/social?username=test_user&platforms=GitHub,Instagram"
 ```
 
-### Reverse phone number lookup
+### Search username with profile scraping
 
 ```bash
-# E.164 format (preferred)
-curl "http://127.0.0.1:8000/search/phone?number=%2B14155552671"
-
-# National format with a region hint
-curl "http://127.0.0.1:8000/search/phone?number=4155552671&region=US"
-
-# Optional Numverify enrichment (requires NUMVERIFY_API_KEY env var)
-curl "http://127.0.0.1:8000/search/phone?number=%2B14155552671&numverify=true"
+curl "http://127.0.0.1:8000/search/social?username=torvalds&scrape=true"
 ```
 
-The response includes validity, country/region code, rough geographic location,
-carrier (when known), line type (mobile/fixed/voip/...), timezones, and formatted
-strings (E.164, international, national, RFC 3966). All enrichment other than
-Numverify is fully offline via Google's libphonenumber. Owner/name lookup
-requires a paid third-party API (e.g. Numverify, Twilio Lookup, Truecaller) —
-this service ships with optional Numverify support only.
+### Search by real name
+
+```bash
+curl "http://127.0.0.1:8000/search/name?name=John+Doe"
+```
+
+### Identify: face + name + social in one request
+
+```bash
+curl -X POST "http://127.0.0.1:8000/search/identify?name=John+Doe&scrape=true" \
+  -F "file=@/path/to/face.jpg"
+```
 
 ## Supported platforms
 
-This project includes 70+ platforms, including:
+This project includes 100+ platforms, including:
 Facebook, Instagram, Twitter/X, LinkedIn, TikTok, Snapchat, Threads, YouTube,
 Reddit, Discord, Telegram, GitHub, GitLab, Steam, Twitch, Spotify, Medium,
-Hugging Face, ProductHunt, and many more.
+Hugging Face, ProductHunt, Pinterest, LeetCode, HackerRank, CodePen, Wattpad,
+and many more.
 
 Use `GET /platforms` for the exact live list.

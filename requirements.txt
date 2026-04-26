@@ -7,4 +7,5 @@ numpy
 python-multipart
 httpx
 python-telegram-bot
-phonenumbers
+beautifulsoup4
+lxml
