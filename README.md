@@ -58,6 +58,9 @@ docker compose up --build
 - `GET /search/name/usernames?name=John+Doe` — preview the username variations that would be generated for a name.
 - `POST /search/identify` (`file`, optional `name`, optional `username`, `scrape`) — combines face matching with social media discovery in one request.
 - `GET /platforms` — lists supported social platforms.
+- `GET /search/phone?number=+14155552671` — reverse phone number lookup (country, region, carrier, line type, timezones).
+- `GET /search/phone?number=4155552671&region=US` — national-format numbers with an ISO region hint.
+- `GET /search/phone?number=+14155552671&numverify=true` — also query Numverify (requires `NUMVERIFY_API_KEY` env var).
 
 ## Profile scraping
 
